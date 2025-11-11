@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface LevelData {
   name: string;
   rate: number;
+  difference: number;
   amount: number;
 }
 
@@ -30,32 +31,32 @@ export default function HomeScreen() {
   const [isZufuhrerActive, setIsZufuhrerActive] = useState<boolean>(false);
   const [revenueLevel, setRevenueLevel] = useState<number>(6); // Default: Ebene 6
   
-  // Entry rates per division (in promille or percent)
-  const [entryRates, setEntryRates] = useState({
-    Leben: 100,
-    Sach: 80,
-    KV: 130,
+  // 100% in ‰ - The total commission pool per division
+  const [hundredPercentRates, setHundredPercentRates] = useState({
+    Leben: 44,
+    Sach: 22.5,
+    KV: 8,
   });
   
   // Overhead rates (only when Zuführer is active)
   const [overheadRates, setOverheadRates] = useState({
-    Leben: 7,
-    Sach: 4,
-    KV: 12,
+    Leben: 0,
+    Sach: 0,
+    KV: 0.3,
   });
   
   // Level commission rates (in %)
   const [levelRates, setLevelRates] = useState([
-    { name: 'Strukturführer (S0)', rate: 15 },
-    { name: 'Leiter (S1)', rate: 12 },
-    { name: 'Ebene 2', rate: 10 },
-    { name: 'Ebene 3', rate: 8 },
-    { name: 'Ebene 4', rate: 7 },
-    { name: 'Ebene 5', rate: 6 },
-    { name: 'Ebene 6', rate: 5 },
-    { name: 'Ebene 7', rate: 4 },
-    { name: 'Ebene 8', rate: 3 },
-    { name: 'Ebene 9', rate: 2 },
+    { name: 'Strukturführer (S0)', rate: 85 },
+    { name: 'Leiter (S1)', rate: 80 },
+    { name: 'Ebene 2', rate: 75 },
+    { name: 'Ebene 3', rate: 70 },
+    { name: 'Ebene 4', rate: 65 },
+    { name: 'Ebene 5', rate: 60 },
+    { name: 'Ebene 6', rate: 55 },
+    { name: 'Ebene 7', rate: 50 },
+    { name: 'Ebene 8', rate: 45 },
+    { name: 'Ebene 9', rate: 40 },
   ]);
   
   const [visibleLevels, setVisibleLevels] = useState<number>(7);
@@ -67,50 +68,77 @@ export default function HomeScreen() {
   
   const loadData = async () => {
     try {
-      const savedEntryRates = await AsyncStorage.getItem('entryRates');
+      const savedHundredPercent = await AsyncStorage.getItem('hundredPercentRates');
       const savedOverheadRates = await AsyncStorage.getItem('overheadRates');
       const savedLevelRates = await AsyncStorage.getItem('levelRates');
       const savedVisibleLevels = await AsyncStorage.getItem('visibleLevels');
+      const savedRevenueLevel = await AsyncStorage.getItem('revenueLevel');
       
-      if (savedEntryRates) setEntryRates(JSON.parse(savedEntryRates));
+      if (savedHundredPercent) setHundredPercentRates(JSON.parse(savedHundredPercent));
       if (savedOverheadRates) setOverheadRates(JSON.parse(savedOverheadRates));
       if (savedLevelRates) setLevelRates(JSON.parse(savedLevelRates));
       if (savedVisibleLevels) setVisibleLevels(JSON.parse(savedVisibleLevels));
+      if (savedRevenueLevel) setRevenueLevel(JSON.parse(savedRevenueLevel));
     } catch (error) {
       console.log('Error loading data:', error);
     }
   };
   
-  // Calculate commission distribution
+  // Calculate commission distribution with difference-based logic
   const calculateDistribution = (): LevelData[] => {
     const sum = parseFloat(assessmentSum) || 0;
-    const entryRate = entryRates[division];
+    const hundredPercentRate = hundredPercentRates[division];
     
-    // Calculate base commission pot
-    const commissionPot = (sum * entryRate) / 100;
+    // Calculate base commission pot (100% in ‰)
+    // For Sach, it's already in %, for Leben and KV it's in ‰
+    const commissionPot = division === 'Sach' 
+      ? (sum * hundredPercentRate) / 100 
+      : (sum * hundredPercentRate) / 1000;
     
-    // Calculate distribution from revenue level upwards
+    console.log(`Assessment Sum: ${sum}, Division: ${division}, 100% Rate: ${hundredPercentRate}‰, Commission Pot: ${commissionPot}`);
+    
+    // Calculate distribution from revenue level upwards using difference logic
     const results: LevelData[] = [];
-    let remainingPot = commissionPot;
     
     for (let i = revenueLevel; i >= 0; i--) {
       const level = levelRates[i];
-      const levelAmount = (commissionPot * level.rate) / 100;
-      remainingPot -= levelAmount;
+      let difference = 0;
+      
+      if (i === revenueLevel) {
+        // Revenue level gets their full rate
+        difference = level.rate;
+      } else {
+        // Upper levels get only the difference
+        const nextLevelRate = levelRates[i + 1].rate;
+        difference = level.rate - nextLevelRate;
+      }
+      
+      // Calculate the actual amount in currency
+      const levelAmount = (commissionPot * difference) / 100;
+      
+      console.log(`Level ${i} (${level.name}): Rate ${level.rate}%, Difference ${difference}%, Amount ${levelAmount}`);
       
       results.unshift({
         name: level.name,
         rate: level.rate,
+        difference: difference,
         amount: levelAmount,
       });
     }
     
     // Add overhead if Zuführer is active
     if (isZufuhrerActive) {
-      const overheadAmount = (sum * overheadRates[division]) / 100;
+      const overheadRate = overheadRates[division];
+      const overheadAmount = division === 'Sach'
+        ? (sum * overheadRate) / 100
+        : (sum * overheadRate) / 1000;
+      
+      console.log(`Zuführer Overhead: ${overheadRate}‰, Amount: ${overheadAmount}`);
+      
       results.unshift({
         name: 'Zuführer (Overhead)',
-        rate: overheadRates[division],
+        rate: overheadRate,
+        difference: overheadRate,
         amount: overheadAmount,
       });
     }
@@ -120,15 +148,17 @@ export default function HomeScreen() {
   
   const distribution = calculateDistribution();
   const totalAmount = distribution.reduce((sum, item) => sum + item.amount, 0);
+  const totalPercentage = distribution.reduce((sum, item) => sum + item.difference, 0);
   
   const exportToCSV = () => {
-    let csv = 'Ebene,Provisionssatz (%),Betrag (€)\n';
+    let csv = 'Ebene,Provisionssatz (%),Differenz (%),Betrag (€)\n';
     distribution.forEach(item => {
-      csv += `${item.name},${item.rate},${item.amount.toFixed(2)}\n`;
+      csv += `${item.name},${item.rate},${item.difference.toFixed(2)},${item.amount.toFixed(2)}\n`;
     });
-    csv += `\nGesamt,,${totalAmount.toFixed(2)}\n`;
-    csv += `Bewertungssumme,,${assessmentSum}\n`;
-    csv += `Sparte,,${division}\n`;
+    csv += `\nGesamt,,${totalPercentage.toFixed(2)},${totalAmount.toFixed(2)}\n`;
+    csv += `Bewertungssumme,,,${assessmentSum}\n`;
+    csv += `Sparte,,,${division}\n`;
+    csv += `100% in ‰,,,${hundredPercentRates[division]}\n`;
     
     // In a real app, you would use a library like react-native-fs or expo-sharing
     Alert.alert(
@@ -203,6 +233,13 @@ export default function HomeScreen() {
               </Pressable>
             ))}
           </View>
+          <View style={styles.divisionInfo}>
+            <Text style={styles.divisionInfoText}>
+              100% = {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'}
+              {division === 'KV' && ' (Monatsbeitrag)'}
+              {division === 'Sach' && ' (Sachnettobeitrag)'}
+            </Text>
+          </View>
         </View>
         
         {/* Action Buttons */}
@@ -236,64 +273,30 @@ export default function HomeScreen() {
           </Pressable>
         </View>
         
-        {/* Overhead Settings (only visible when Zuführer is active) */}
+        {/* Overhead Info (only visible when Zuführer is active) */}
         {isZufuhrerActive && (
           <View style={[styles.card, styles.overheadCard]}>
-            <Text style={styles.sectionTitle}>Overhead-Sätze</Text>
-            <View style={styles.overheadRow}>
-              <Text style={styles.overheadLabel}>Leben:</Text>
-              <View style={styles.smallInputContainer}>
-                <TextInput
-                  style={styles.smallInput}
-                  value={overheadRates.Leben.toString()}
-                  onChangeText={(text) => {
-                    const value = parseFloat(text) || 0;
-                    setOverheadRates({ ...overheadRates, Leben: value });
-                  }}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.inputSuffix}>%</Text>
-              </View>
+            <View style={styles.overheadHeader}>
+              <IconSymbol name="info.circle.fill" color={colors.primary} size={20} />
+              <Text style={styles.overheadTitle}>Zuführer-Overhead aktiv</Text>
             </View>
-            <View style={styles.overheadRow}>
-              <Text style={styles.overheadLabel}>Sach:</Text>
-              <View style={styles.smallInputContainer}>
-                <TextInput
-                  style={styles.smallInput}
-                  value={overheadRates.Sach.toString()}
-                  onChangeText={(text) => {
-                    const value = parseFloat(text) || 0;
-                    setOverheadRates({ ...overheadRates, Sach: value });
-                  }}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.inputSuffix}>%</Text>
-              </View>
-            </View>
-            <View style={styles.overheadRow}>
-              <Text style={styles.overheadLabel}>KV:</Text>
-              <View style={styles.smallInputContainer}>
-                <TextInput
-                  style={styles.smallInput}
-                  value={overheadRates.KV.toString()}
-                  onChangeText={(text) => {
-                    const value = parseFloat(text) || 0;
-                    setOverheadRates({ ...overheadRates, KV: value });
-                  }}
-                  keyboardType="numeric"
-                />
-                <Text style={styles.inputSuffix}>%</Text>
-              </View>
-            </View>
+            <Text style={styles.overheadText}>
+              Zusätzlich zu den 100%: +{overheadRates[division]}{division === 'Sach' ? '%' : '‰'}
+            </Text>
           </View>
         )}
         
         {/* Results Section */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Provisionsverteilung</Text>
+          <Text style={styles.sectionSubtitle}>
+            Verteilung nach Differenz-Prinzip
+          </Text>
+          
           {distribution.map((item, index) => {
             const isRevenueLevel = item.name === levelRates[revenueLevel]?.name;
             const isStructureLeader = item.name === 'Strukturführer (S0)';
+            const isZufuhrer = item.name === 'Zuführer (Overhead)';
             
             return (
               <View
@@ -302,20 +305,30 @@ export default function HomeScreen() {
                   styles.resultRow,
                   isStructureLeader && styles.structureLeaderRow,
                   isRevenueLevel && styles.revenueLevelRow,
+                  isZufuhrer && styles.zufuhrerRow,
                 ]}
               >
                 <View style={styles.resultLeft}>
                   <Text style={[
                     styles.resultName,
-                    isStructureLeader && styles.structureLeaderText
+                    isStructureLeader && styles.structureLeaderText,
+                    isZufuhrer && styles.zufuhrerText,
                   ]}>
                     {item.name}
                   </Text>
-                  <Text style={styles.resultRate}>{item.rate}%</Text>
+                  <View style={styles.resultDetails}>
+                    <Text style={styles.resultRate}>
+                      Satz: {item.rate}%
+                    </Text>
+                    <Text style={styles.resultDifference}>
+                      Erhält: {item.difference.toFixed(1)}%
+                    </Text>
+                  </View>
                 </View>
                 <Text style={[
                   styles.resultAmount,
-                  isStructureLeader && styles.structureLeaderAmount
+                  isStructureLeader && styles.structureLeaderAmount,
+                  isZufuhrer && styles.zufuhrerAmount,
                 ]}>
                   {item.amount.toFixed(2)} €
                 </Text>
@@ -324,9 +337,24 @@ export default function HomeScreen() {
           })}
           
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Gesamt</Text>
+            <View>
+              <Text style={styles.totalLabel}>Gesamt</Text>
+              <Text style={styles.totalPercentage}>{totalPercentage.toFixed(1)}%</Text>
+            </View>
             <Text style={styles.totalAmount}>{totalAmount.toFixed(2)} €</Text>
           </View>
+        </View>
+        
+        {/* Info Card */}
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>ℹ️ Berechnungslogik</Text>
+          <Text style={styles.infoText}>
+            • Die Bewertungssumme wird mit {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'} multipliziert = Provisionstopf{'\n'}
+            • Jede Ebene erhält nur die Differenz zu der darunterliegenden Ebene{'\n'}
+            • Der Umsatzgeber erhält seinen vollen Satz{'\n'}
+            • Übergeordnete Ebenen erhalten nur die Differenz{'\n'}
+            • Der Zuführer-Overhead wird zusätzlich berechnet (on top)
+          </Text>
         </View>
         
         {/* Bottom spacing for tab bar */}
@@ -362,6 +390,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
     marginBottom: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: colors.textLight,
+    marginBottom: 12,
+    fontStyle: 'italic',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -432,6 +466,18 @@ const styles = StyleSheet.create({
   radioLabelActive: {
     color: colors.primary,
   },
+  divisionInfo: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 8,
+  },
+  divisionInfoText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
@@ -464,34 +510,21 @@ const styles = StyleSheet.create({
   actionButtonTextActive: {
     color: colors.primary,
   },
-  overheadRow: {
+  overheadHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  overheadLabel: {
+  overheadTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
+    marginLeft: 8,
   },
-  smallInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 100,
-  },
-  smallInput: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
+  overheadText: {
+    fontSize: 14,
     color: colors.text,
-    paddingVertical: 8,
-    textAlign: 'right',
+    fontWeight: '600',
   },
   resultRow: {
     flexDirection: 'row',
@@ -512,6 +545,11 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.accent,
   },
+  zufuhrerRow: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 2,
+    borderColor: '#81C784',
+  },
   resultLeft: {
     flex: 1,
   },
@@ -519,15 +557,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   structureLeaderText: {
     color: colors.primary,
     fontWeight: '700',
   },
+  zufuhrerText: {
+    color: '#2E7D32',
+    fontWeight: '700',
+  },
+  resultDetails: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   resultRate: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textLight,
+  },
+  resultDifference: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
   resultAmount: {
     fontSize: 18,
@@ -536,6 +587,10 @@ const styles = StyleSheet.create({
   },
   structureLeaderAmount: {
     color: colors.primary,
+    fontSize: 20,
+  },
+  zufuhrerAmount: {
+    color: '#2E7D32',
     fontSize: 20,
   },
   totalRow: {
@@ -552,10 +607,33 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text,
   },
+  totalPercentage: {
+    fontSize: 13,
+    color: colors.textLight,
+    marginTop: 2,
+  },
   totalAmount: {
     fontSize: 24,
     fontWeight: '800',
     color: colors.primary,
+  },
+  infoCard: {
+    backgroundColor: '#E3F2FD',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#90CAF9',
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 22,
   },
   headerButton: {
     padding: 8,
