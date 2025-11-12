@@ -31,7 +31,7 @@ export default function HomeScreen() {
   const [isZufuhrerActive, setIsZufuhrerActive] = useState<boolean>(false);
   const [revenueLevel, setRevenueLevel] = useState<number>(6); // Default: Ebene 6
   
-  // 100% in ‰ - The total commission pool per division
+  // 100% in ‰ - The total commission pool per division (Eingangssatz)
   const [hundredPercentRates, setHundredPercentRates] = useState({
     Leben: 44,
     Sach: 22.5,
@@ -84,6 +84,20 @@ export default function HomeScreen() {
     }
   };
   
+  // Get dynamic input label based on division
+  const getInputLabel = () => {
+    switch (division) {
+      case 'Leben':
+        return 'Bewertungssumme';
+      case 'Sach':
+        return 'Jahresnettoprämie';
+      case 'KV':
+        return 'Monatsbeitrag';
+      default:
+        return 'Bewertungssumme';
+    }
+  };
+  
   // Calculate commission distribution with difference-based logic
   const calculateDistribution = (): LevelData[] => {
     const sum = parseFloat(assessmentSum) || 0;
@@ -91,11 +105,19 @@ export default function HomeScreen() {
     
     // Calculate base commission pot (100% in ‰)
     // For Sach, it's already in %, for Leben and KV it's in ‰
-    const commissionPot = division === 'Sach' 
-      ? (sum * hundredPercentRate) / 100 
-      : (sum * hundredPercentRate) / 1000;
+    let commissionPot = 0;
     
-    console.log(`Assessment Sum: ${sum}, Division: ${division}, 100% Rate: ${hundredPercentRate}‰, Commission Pot: ${commissionPot}`);
+    if (division === 'Sach') {
+      commissionPot = (sum * hundredPercentRate) / 100;
+    } else if (division === 'KV') {
+      // For KV: Monatsbeitrag x 8 (factor) x rate in ‰
+      commissionPot = (sum * 8 * hundredPercentRate) / 1000;
+    } else {
+      // Leben: Bewertungssumme x rate in ‰
+      commissionPot = (sum * hundredPercentRate) / 1000;
+    }
+    
+    console.log(`Assessment Sum: ${sum}, Division: ${division}, 100% Rate: ${hundredPercentRate}${division === 'Sach' ? '%' : '‰'}, Commission Pot: ${commissionPot}`);
     
     // Calculate distribution from revenue level upwards using difference logic
     const results: LevelData[] = [];
@@ -129,11 +151,19 @@ export default function HomeScreen() {
     // Add overhead if Zuführer is active
     if (isZufuhrerActive) {
       const overheadRate = overheadRates[division];
-      const overheadAmount = division === 'Sach'
-        ? (sum * overheadRate) / 100
-        : (sum * overheadRate) / 1000;
+      let overheadAmount = 0;
       
-      console.log(`Zuführer Overhead: ${overheadRate}‰, Amount: ${overheadAmount}`);
+      if (division === 'Sach') {
+        overheadAmount = (sum * overheadRate) / 100;
+      } else if (division === 'KV') {
+        // For KV: Monatsbeitrag x 8 (factor) x overhead rate in ‰
+        overheadAmount = (sum * 8 * overheadRate) / 1000;
+      } else {
+        // Leben
+        overheadAmount = (sum * overheadRate) / 1000;
+      }
+      
+      console.log(`Zuführer Overhead: ${overheadRate}${division === 'Sach' ? '%' : '‰'}, Amount: ${overheadAmount}`);
       
       results.unshift({
         name: 'Zuführer (Overhead)',
@@ -156,9 +186,9 @@ export default function HomeScreen() {
       csv += `${item.name},${item.rate},${item.difference.toFixed(2)},${item.amount.toFixed(2)}\n`;
     });
     csv += `\nGesamt,,${totalPercentage.toFixed(2)},${totalAmount.toFixed(2)}\n`;
-    csv += `Bewertungssumme,,,${assessmentSum}\n`;
+    csv += `${getInputLabel()},,,${assessmentSum}\n`;
     csv += `Sparte,,,${division}\n`;
-    csv += `100% in ‰,,,${hundredPercentRates[division]}\n`;
+    csv += `Eingangssatz (100%),,,${hundredPercentRates[division]}${division === 'Sach' ? '%' : '‰'}\n`;
     
     // In a real app, you would use a library like react-native-fs or expo-sharing
     Alert.alert(
@@ -189,9 +219,9 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Input Section */}
+        {/* Input Section with dynamic label */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Bewertungssumme</Text>
+          <Text style={styles.sectionTitle}>{getInputLabel()}</Text>
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
@@ -203,6 +233,14 @@ export default function HomeScreen() {
             />
             <Text style={styles.inputSuffix}>€</Text>
           </View>
+          {division === 'KV' && (
+            <View style={styles.kvInfoBox}>
+              <IconSymbol name="info.circle" color={colors.primary} size={16} />
+              <Text style={styles.kvInfoText}>
+                Bei KV wird der Monatsbeitrag mit Faktor 8 multipliziert
+              </Text>
+            </View>
+          )}
         </View>
         
         {/* Division Selection */}
@@ -235,10 +273,15 @@ export default function HomeScreen() {
           </View>
           <View style={styles.divisionInfo}>
             <Text style={styles.divisionInfoText}>
-              100% = {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'}
-              {division === 'KV' && ' (Monatsbeitrag)'}
-              {division === 'Sach' && ' (Sachnettobeitrag)'}
+              Eingangssatz (100%) = {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'}
             </Text>
+            <Pressable 
+              style={styles.editEingangssatzButton}
+              onPress={() => router.push('/(tabs)/settings')}
+            >
+              <IconSymbol name="pencil" color={colors.primary} size={14} />
+              <Text style={styles.editEingangssatzText}>Ändern</Text>
+            </Pressable>
           </View>
         </View>
         
@@ -282,7 +325,15 @@ export default function HomeScreen() {
             </View>
             <Text style={styles.overheadText}>
               Zusätzlich zu den 100%: +{overheadRates[division]}{division === 'Sach' ? '%' : '‰'}
+              {division === 'KV' && ' (wird mit Faktor 8 multipliziert)'}
             </Text>
+            <Pressable 
+              style={styles.editOverheadButton}
+              onPress={() => router.push('/(tabs)/settings')}
+            >
+              <IconSymbol name="pencil" color={colors.primary} size={14} />
+              <Text style={styles.editOverheadText}>Overhead anpassen</Text>
+            </Pressable>
           </View>
         )}
         
@@ -317,9 +368,11 @@ export default function HomeScreen() {
                     {item.name}
                   </Text>
                   <View style={styles.resultDetails}>
-                    <Text style={styles.resultRate}>
-                      Satz: {item.rate}%
-                    </Text>
+                    {!isZufuhrer && (
+                      <Text style={styles.resultRate}>
+                        Satz: {item.rate}%
+                      </Text>
+                    )}
                     <Text style={styles.resultDifference}>
                       Erhält: {item.difference.toFixed(1)}%
                     </Text>
@@ -349,11 +402,11 @@ export default function HomeScreen() {
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>ℹ️ Berechnungslogik</Text>
           <Text style={styles.infoText}>
-            • Die Bewertungssumme wird mit {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'} multipliziert = Provisionstopf{'\n'}
+            • {getInputLabel()} wird mit {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'} multipliziert{division === 'KV' ? ' (x8 Faktor)' : ''} = Provisionstopf{'\n'}
             • Jede Ebene erhält nur die Differenz zu der darunterliegenden Ebene{'\n'}
             • Der Umsatzgeber erhält seinen vollen Satz{'\n'}
             • Übergeordnete Ebenen erhalten nur die Differenz{'\n'}
-            • Der Zuführer-Overhead wird zusätzlich berechnet (on top)
+            • Der Zuführer-Overhead wird zusätzlich berechnet (on top){division === 'KV' ? ' und ebenfalls mit Faktor 8 multipliziert' : ''}
           </Text>
         </View>
         
@@ -419,6 +472,21 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     marginLeft: 8,
   },
+  kvInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    gap: 8,
+  },
+  kvInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: '600',
+  },
   radioGroup: {
     flexDirection: 'row',
     gap: 12,
@@ -468,15 +536,33 @@ const styles = StyleSheet.create({
   },
   divisionInfo: {
     marginTop: 12,
-    padding: 10,
+    padding: 12,
     backgroundColor: colors.backgroundAlt,
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   divisionInfoText: {
     fontSize: 13,
     color: colors.text,
     fontWeight: '600',
-    textAlign: 'center',
+  },
+  editEingangssatzButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: colors.card,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  editEingangssatzText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
   buttonRow: {
     flexDirection: 'row',
@@ -524,6 +610,24 @@ const styles = StyleSheet.create({
   overheadText: {
     fontSize: 14,
     color: colors.text,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  editOverheadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignSelf: 'flex-start',
+  },
+  editOverheadText: {
+    fontSize: 13,
+    color: colors.primary,
     fontWeight: '600',
   },
   resultRow: {
