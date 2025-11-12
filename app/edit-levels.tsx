@@ -24,12 +24,12 @@ export default function EditLevelsScreen() {
   const router = useRouter();
   
   const [levels, setLevels] = useState<Level[]>([
-    { name: 'Strukturführer (S0)', rate: 85 },
-    { name: 'Leiter (S1)', rate: 80 },
-    { name: 'Ebene 2', rate: 75 },
-    { name: 'Ebene 3', rate: 70 },
-    { name: 'Ebene 4', rate: 65 },
-    { name: 'Ebene 5', rate: 60 },
+    { name: 'Strukturführer (S0)', rate: 100 },
+    { name: 'Leiter (S1)', rate: 100 },
+    { name: 'Ebene 2', rate: 95 },
+    { name: 'Ebene 3', rate: 85 },
+    { name: 'Ebene 4', rate: 75 },
+    { name: 'Ebene 5', rate: 65 },
     { name: 'Ebene 6', rate: 55 },
     { name: 'Ebene 7', rate: 50 },
     { name: 'Ebene 8', rate: 45 },
@@ -59,6 +59,51 @@ export default function EditLevelsScreen() {
   
   const saveLevels = async () => {
     try {
+      // Validate that percentages decrease going down
+      let isValid = true;
+      let errorMessage = '';
+      
+      for (let i = 0; i < levels.length - 1; i++) {
+        if (levels[i].rate < levels[i + 1].rate) {
+          isValid = false;
+          errorMessage = `Fehler: ${levels[i].name} (${levels[i].rate}%) hat weniger als ${levels[i + 1].name} (${levels[i + 1].rate}%). Übergeordnete Ebenen müssen höhere Prozentsätze haben.`;
+          break;
+        }
+      }
+      
+      if (!isValid) {
+        Alert.alert('Ungültige Prozentsätze', errorMessage);
+        return;
+      }
+      
+      // Calculate total percentage
+      let totalPercentage = 0;
+      for (let i = revenueLevelIndex; i >= 0; i--) {
+        if (i === revenueLevelIndex) {
+          totalPercentage += levels[i].rate;
+        } else {
+          const nextLevelRate = levels[i + 1].rate;
+          totalPercentage += (levels[i].rate - nextLevelRate);
+        }
+      }
+      
+      if (Math.abs(totalPercentage - 100) > 0.1) {
+        Alert.alert(
+          'Warnung',
+          `Die Gesamtprozentsätze ergeben ${totalPercentage.toFixed(1)}% statt 100%. Bitte passen Sie die Werte an.`,
+          [
+            { text: 'Trotzdem speichern', onPress: async () => {
+              await AsyncStorage.setItem('levelRates', JSON.stringify(levels));
+              await AsyncStorage.setItem('visibleLevels', JSON.stringify(visibleLevels));
+              await AsyncStorage.setItem('revenueLevel', JSON.stringify(revenueLevelIndex));
+              Alert.alert('Gespeichert', 'Ebenen wurden gespeichert.');
+            }},
+            { text: 'Abbrechen', style: 'cancel' }
+          ]
+        );
+        return;
+      }
+      
       await AsyncStorage.setItem('levelRates', JSON.stringify(levels));
       await AsyncStorage.setItem('visibleLevels', JSON.stringify(visibleLevels));
       await AsyncStorage.setItem('revenueLevel', JSON.stringify(revenueLevelIndex));
@@ -72,20 +117,34 @@ export default function EditLevelsScreen() {
   const updateLevelRate = (index: number, value: number) => {
     const newLevels = [...levels];
     newLevels[index].rate = value;
+    
+    // Enforce hierarchical logic: upper levels must have >= rate than lower levels
+    // If changing a level, ensure all levels above have at least this rate
+    for (let i = index - 1; i >= 0; i--) {
+      if (newLevels[i].rate < value) {
+        newLevels[i].rate = value;
+      }
+    }
+    
+    // Ensure all levels below have at most this rate
+    for (let i = index + 1; i < newLevels.length; i++) {
+      if (newLevels[i].rate > value) {
+        newLevels[i].rate = value;
+      }
+    }
+    
     setLevels(newLevels);
   };
   
   const expandLevels = () => {
     if (visibleLevels < 10) {
       setVisibleLevels(10);
-      saveLevels();
     }
   };
   
   const collapseLevels = () => {
     if (visibleLevels > 7) {
       setVisibleLevels(7);
-      saveLevels();
     }
   };
   
@@ -101,6 +160,17 @@ export default function EditLevelsScreen() {
     }
     return 0;
   };
+  
+  // Calculate total percentage
+  const calculateTotalPercentage = (): number => {
+    let total = 0;
+    for (let i = revenueLevelIndex; i >= 0; i--) {
+      total += calculateDifference(i);
+    }
+    return total;
+  };
+  
+  const totalPercentage = calculateTotalPercentage();
   
   return (
     <>
@@ -135,8 +205,27 @@ export default function EditLevelsScreen() {
         <View style={styles.card}>
           <Text style={styles.title}>Provisionsverteilung</Text>
           <Text style={styles.description}>
-            Legen Sie die Provisionssätze für jede Ebene fest. Jede Ebene erhält nur die Differenz zwischen ihrem Satz und dem Satz der darunterliegenden Ebene.
+            Legen Sie die Provisionssätze für jede Ebene fest. Übergeordnete Ebenen müssen höhere Prozentsätze haben. Bei Gesamt muss immer 100% stehen.
           </Text>
+          
+          {/* Total Percentage Display */}
+          <View style={[
+            styles.totalPercentageCard,
+            Math.abs(totalPercentage - 100) < 0.1 ? styles.totalPercentageCardValid : styles.totalPercentageCardInvalid
+          ]}>
+            <Text style={styles.totalPercentageLabel}>Gesamt:</Text>
+            <Text style={[
+              styles.totalPercentageValue,
+              Math.abs(totalPercentage - 100) < 0.1 ? styles.totalPercentageValueValid : styles.totalPercentageValueInvalid
+            ]}>
+              {totalPercentage.toFixed(1)}%
+            </Text>
+            {Math.abs(totalPercentage - 100) < 0.1 ? (
+              <IconSymbol name="checkmark.circle.fill" color="#2E7D32" size={24} />
+            ) : (
+              <IconSymbol name="exclamationmark.triangle.fill" color="#D32F2F" size={24} />
+            )}
+          </View>
           
           {levels.slice(0, visibleLevels).map((level, index) => {
             const isStructureLeader = index === 0;
@@ -176,7 +265,6 @@ export default function EditLevelsScreen() {
                     ]}
                     onPress={() => {
                       setRevenueLevelIndex(index);
-                      saveLevels();
                     }}
                   >
                     <Text style={[
@@ -262,20 +350,25 @@ export default function EditLevelsScreen() {
             • Der Strukturführer (S0) steht immer ganz oben.{'\n'}
             • Die Umsatzgebende Ebene wird farblich markiert.{'\n'}
             • Jede Ebene erhält nur die Differenz zu der darunterliegenden Ebene.{'\n'}
-            • Beispiel: Umsatzgeber hat 75%, übergeordneter hat 85% → erhält 10%.{'\n'}
-            • Die Prozentsätze müssen zusammen 100% ergeben.
+            • Übergeordnete Ebenen müssen höhere oder gleiche Prozentsätze haben.{'\n'}
+            • Bei Gesamt muss immer 100% stehen.{'\n'}
+            • Der Leiter hat in der Regel 100%, dann Ebene 2 95%, Ebene 3 85% usw.
           </Text>
         </View>
         
         <View style={styles.exampleCard}>
           <Text style={styles.exampleTitle}>📊 Beispiel-Berechnung</Text>
           <Text style={styles.exampleText}>
-            Umsatzgeber (Ebene 6): 75%{'\n'}
-            Ebene 5: 80% → erhält 5% (Differenz){'\n'}
-            Ebene 4: 85% → erhält 5% (Differenz){'\n'}
-            Strukturführer: 100% → erhält 15% (Differenz){'\n'}
+            Leiter (S1, Umsatzgeber): 100% → erhält 100%{'\n'}
+            Strukturführer (S0): 100% → erhält 0% (Differenz){'\n'}
             {'\n'}
-            Gesamt: 75% + 5% + 5% + 15% = 100%
+            Oder:{'\n'}
+            Ebene 3 (Umsatzgeber): 85% → erhält 85%{'\n'}
+            Ebene 2: 95% → erhält 10% (Differenz){'\n'}
+            Leiter: 100% → erhält 5% (Differenz){'\n'}
+            Strukturführer: 100% → erhält 0% (Differenz){'\n'}
+            {'\n'}
+            Gesamt: 85% + 10% + 5% + 0% = 100%
           </Text>
         </View>
         
@@ -311,8 +404,42 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 14,
     color: colors.textLight,
-    marginBottom: 24,
+    marginBottom: 16,
     lineHeight: 20,
+  },
+  totalPercentageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 2,
+  },
+  totalPercentageCardValid: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#2E7D32',
+  },
+  totalPercentageCardInvalid: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#D32F2F',
+  },
+  totalPercentageLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  totalPercentageValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    flex: 1,
+    textAlign: 'center',
+  },
+  totalPercentageValueValid: {
+    color: '#2E7D32',
+  },
+  totalPercentageValueInvalid: {
+    color: '#D32F2F',
   },
   levelRow: {
     backgroundColor: colors.backgroundAlt,

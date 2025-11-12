@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IconSymbol } from "@/components/IconSymbol";
 
 export default function SettingsScreen() {
-  // Eingangssatz (100% in ‰) - The total commission pool per division
+  // Eingangssatz (100%) - The total commission pool per division
   const [hundredPercentRates, setHundredPercentRates] = useState({
     Leben: '44',
     Sach: '22.5',
@@ -162,16 +162,10 @@ export default function SettingsScreen() {
                 placeholder="8"
                 placeholderTextColor={colors.textLight}
               />
-              <Text style={styles.inputSuffix}>‰</Text>
-            </View>
-            <View style={styles.kvSpecialBox}>
-              <IconSymbol name="info.circle.fill" color={colors.primary} size={16} />
-              <Text style={styles.kvSpecialText}>
-                Bei KV wird der Monatsbeitrag mit Faktor 8 multipliziert
-              </Text>
+              <Text style={styles.inputSuffix}>Faktor</Text>
             </View>
             <Text style={styles.hint}>
-              Beispiel: 8‰ bedeutet 0,8% vom (Monatsbeitrag × 8)
+              Beispiel: 500 € × 8 = 4.000 € Provisionstopf
             </Text>
           </View>
         </View>
@@ -226,10 +220,10 @@ export default function SettingsScreen() {
                 placeholder="0"
                 placeholderTextColor={colors.textLight}
               />
-              <Text style={styles.inputSuffix}>‰</Text>
+              <Text style={styles.inputSuffix}>%</Text>
             </View>
             <Text style={styles.hint}>
-              Zusätzlich zur Jahresnettoprämie
+              Zusätzlich zur Jahresnettoprämie (in Prozent)
             </Text>
           </View>
           
@@ -250,16 +244,10 @@ export default function SettingsScreen() {
                 placeholder="0.3"
                 placeholderTextColor={colors.textLight}
               />
-              <Text style={styles.inputSuffix}>‰</Text>
-            </View>
-            <View style={styles.kvSpecialBox}>
-              <IconSymbol name="info.circle.fill" color={colors.primary} size={16} />
-              <Text style={styles.kvSpecialText}>
-                Overhead wird ebenfalls mit Faktor 8 multipliziert
-              </Text>
+              <Text style={styles.inputSuffix}>MB</Text>
             </View>
             <Text style={styles.hint}>
-              Beispiel: 0,3‰ zusätzlich zu den 8‰ = insgesamt 8,3‰ (jeweils × 8)
+              Monatsbeitrag wird direkt multipliziert (z.B. 500 € × 0,3 = 150 €)
             </Text>
           </View>
         </View>
@@ -277,10 +265,13 @@ export default function SettingsScreen() {
             <Text style={styles.infoLabel}>Zuführer-Overhead:</Text> Wird zusätzlich berechnet und ist nicht Teil der 100%.{'\n'}
             
             <Text style={styles.infoBullet}>• </Text>
-            <Text style={styles.infoLabel}>KV-Besonderheit:</Text> Bei KV wird sowohl der Eingangssatz als auch der Overhead mit dem Monatsbeitrag × 8 berechnet.{'\n'}
+            <Text style={styles.infoLabel}>KV-Besonderheit:</Text> Bei KV wird der Monatsbeitrag direkt mit dem Eingangssatz multipliziert (z.B. 500 € × 8 = 4.000 €).{'\n'}
             
             <Text style={styles.infoBullet}>• </Text>
-            <Text style={styles.infoLabel}>Verschiedene Vertriebe:</Text> Sie können die Eingangssätze individuell anpassen, da verschiedene Vertriebe unterschiedliche Sätze haben können.
+            <Text style={styles.infoLabel}>Sach in %:</Text> Bei Sach wird mit Prozent gerechnet.{'\n'}
+            
+            <Text style={styles.infoBullet}>• </Text>
+            <Text style={styles.infoLabel}>KV Overhead in MB:</Text> Der KV-Overhead wird ebenfalls direkt mit dem Monatsbeitrag multipliziert.
           </Text>
         </View>
         
@@ -289,15 +280,15 @@ export default function SettingsScreen() {
           <View style={styles.exampleContent}>
             <Text style={styles.exampleText}>
               Monatsbeitrag: 500 €{'\n'}
-              Eingangssatz: 8‰{'\n'}
-              Zuführer-Overhead: 0,3‰
+              Eingangssatz: 8 (Faktor){'\n'}
+              Zuführer-Overhead: 0,3 MB
             </Text>
             <View style={styles.exampleDivider} />
             <Text style={styles.exampleCalculation}>
               Provisionstopf (100%):{'\n'}
-              500 € × 8 × 8‰ = 32 €{'\n\n'}
+              500 € × 8 = 4.000 €{'\n\n'}
               Zuführer-Overhead:{'\n'}
-              500 € × 8 × 0,3‰ = 1,20 €
+              500 € × 0,3 = 150 €
             </Text>
           </View>
         </View>
@@ -401,21 +392,6 @@ const styles = StyleSheet.create({
     color: colors.textLight,
     marginTop: 4,
     fontStyle: 'italic',
-  },
-  kvSpecialBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    padding: 10,
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
-    gap: 8,
-  },
-  kvSpecialText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '600',
   },
   infoCard: {
     backgroundColor: '#E3F2FD',

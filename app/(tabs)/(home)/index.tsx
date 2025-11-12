@@ -47,12 +47,12 @@ export default function HomeScreen() {
   
   // Level commission rates (in %)
   const [levelRates, setLevelRates] = useState([
-    { name: 'Strukturführer (S0)', rate: 85 },
-    { name: 'Leiter (S1)', rate: 80 },
-    { name: 'Ebene 2', rate: 75 },
-    { name: 'Ebene 3', rate: 70 },
-    { name: 'Ebene 4', rate: 65 },
-    { name: 'Ebene 5', rate: 60 },
+    { name: 'Strukturführer (S0)', rate: 100 },
+    { name: 'Leiter (S1)', rate: 100 },
+    { name: 'Ebene 2', rate: 95 },
+    { name: 'Ebene 3', rate: 85 },
+    { name: 'Ebene 4', rate: 75 },
+    { name: 'Ebene 5', rate: 65 },
     { name: 'Ebene 6', rate: 55 },
     { name: 'Ebene 7', rate: 50 },
     { name: 'Ebene 8', rate: 45 },
@@ -103,21 +103,21 @@ export default function HomeScreen() {
     const sum = parseFloat(assessmentSum) || 0;
     const hundredPercentRate = hundredPercentRates[division];
     
-    // Calculate base commission pot (100% in ‰)
-    // For Sach, it's already in %, for Leben and KV it's in ‰
+    // Calculate base commission pot (100%)
     let commissionPot = 0;
     
     if (division === 'Sach') {
+      // Sach: Jahresnettoprämie × rate in %
       commissionPot = (sum * hundredPercentRate) / 100;
     } else if (division === 'KV') {
-      // For KV: Monatsbeitrag x 8 (factor) x rate in ‰
-      commissionPot = (sum * 8 * hundredPercentRate) / 1000;
+      // KV: Monatsbeitrag × Eingangssatz (direct multiplication, no division)
+      commissionPot = sum * hundredPercentRate;
     } else {
-      // Leben: Bewertungssumme x rate in ‰
+      // Leben: Bewertungssumme × rate in ‰
       commissionPot = (sum * hundredPercentRate) / 1000;
     }
     
-    console.log(`Assessment Sum: ${sum}, Division: ${division}, 100% Rate: ${hundredPercentRate}${division === 'Sach' ? '%' : '‰'}, Commission Pot: ${commissionPot}`);
+    console.log(`Assessment Sum: ${sum}, Division: ${division}, 100% Rate: ${hundredPercentRate}${division === 'Sach' ? '%' : (division === 'KV' ? ' (Faktor)' : '‰')}, Commission Pot: ${commissionPot}`);
     
     // Calculate distribution from revenue level upwards using difference logic
     const results: LevelData[] = [];
@@ -154,16 +154,17 @@ export default function HomeScreen() {
       let overheadAmount = 0;
       
       if (division === 'Sach') {
+        // Sach: Jahresnettoprämie × overhead rate in %
         overheadAmount = (sum * overheadRate) / 100;
       } else if (division === 'KV') {
-        // For KV: Monatsbeitrag x 8 (factor) x overhead rate in ‰
-        overheadAmount = (sum * 8 * overheadRate) / 1000;
+        // KV: Monatsbeitrag × overhead MB (direct multiplication)
+        overheadAmount = sum * overheadRate;
       } else {
-        // Leben
+        // Leben: Bewertungssumme × overhead rate in ‰
         overheadAmount = (sum * overheadRate) / 1000;
       }
       
-      console.log(`Zuführer Overhead: ${overheadRate}${division === 'Sach' ? '%' : '‰'}, Amount: ${overheadAmount}`);
+      console.log(`Zuführer Overhead: ${overheadRate}${division === 'Sach' ? '%' : (division === 'KV' ? ' MB' : '‰')}, Amount: ${overheadAmount}`);
       
       results.unshift({
         name: 'Zuführer (Overhead)',
@@ -188,7 +189,7 @@ export default function HomeScreen() {
     csv += `\nGesamt,,${totalPercentage.toFixed(2)},${totalAmount.toFixed(2)}\n`;
     csv += `${getInputLabel()},,,${assessmentSum}\n`;
     csv += `Sparte,,,${division}\n`;
-    csv += `Eingangssatz (100%),,,${hundredPercentRates[division]}${division === 'Sach' ? '%' : '‰'}\n`;
+    csv += `Eingangssatz (100%),,,${hundredPercentRates[division]}${division === 'Sach' ? '%' : (division === 'KV' ? ' (Faktor)' : '‰')}\n`;
     
     // In a real app, you would use a library like react-native-fs or expo-sharing
     Alert.alert(
@@ -233,14 +234,6 @@ export default function HomeScreen() {
             />
             <Text style={styles.inputSuffix}>€</Text>
           </View>
-          {division === 'KV' && (
-            <View style={styles.kvInfoBox}>
-              <IconSymbol name="info.circle" color={colors.primary} size={16} />
-              <Text style={styles.kvInfoText}>
-                Bei KV wird der Monatsbeitrag mit Faktor 8 multipliziert
-              </Text>
-            </View>
-          )}
         </View>
         
         {/* Division Selection */}
@@ -273,7 +266,7 @@ export default function HomeScreen() {
           </View>
           <View style={styles.divisionInfo}>
             <Text style={styles.divisionInfoText}>
-              Eingangssatz (100%) = {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'}
+              Eingangssatz (100%) = {hundredPercentRates[division]}{division === 'Sach' ? '%' : (division === 'KV' ? ' (Faktor)' : '‰')}
             </Text>
             <Pressable 
               style={styles.editEingangssatzButton}
@@ -324,8 +317,7 @@ export default function HomeScreen() {
               <Text style={styles.overheadTitle}>Zuführer-Overhead aktiv</Text>
             </View>
             <Text style={styles.overheadText}>
-              Zusätzlich zu den 100%: +{overheadRates[division]}{division === 'Sach' ? '%' : '‰'}
-              {division === 'KV' && ' (wird mit Faktor 8 multipliziert)'}
+              Zusätzlich zu den 100%: +{overheadRates[division]}{division === 'Sach' ? '%' : (division === 'KV' ? ' MB' : '‰')}
             </Text>
             <Pressable 
               style={styles.editOverheadButton}
@@ -402,11 +394,12 @@ export default function HomeScreen() {
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>ℹ️ Berechnungslogik</Text>
           <Text style={styles.infoText}>
-            • {getInputLabel()} wird mit {hundredPercentRates[division]}{division === 'Sach' ? '%' : '‰'} multipliziert{division === 'KV' ? ' (x8 Faktor)' : ''} = Provisionstopf{'\n'}
+            • {getInputLabel()} wird mit {hundredPercentRates[division]}{division === 'Sach' ? '%' : (division === 'KV' ? ' (Faktor)' : '‰')} multipliziert = Provisionstopf{'\n'}
             • Jede Ebene erhält nur die Differenz zu der darunterliegenden Ebene{'\n'}
             • Der Umsatzgeber erhält seinen vollen Satz{'\n'}
             • Übergeordnete Ebenen erhalten nur die Differenz{'\n'}
-            • Der Zuführer-Overhead wird zusätzlich berechnet (on top){division === 'KV' ? ' und ebenfalls mit Faktor 8 multipliziert' : ''}
+            • Der Zuführer-Overhead wird zusätzlich berechnet (on top){'\n'}
+            • Bei Gesamt muss immer 100% stehen
           </Text>
         </View>
         
@@ -471,21 +464,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textLight,
     marginLeft: 8,
-  },
-  kvInfoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    padding: 10,
-    backgroundColor: '#E3F2FD',
-    borderRadius: 8,
-    gap: 8,
-  },
-  kvInfoText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: '600',
   },
   radioGroup: {
     flexDirection: 'row',
