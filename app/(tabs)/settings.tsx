@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from "react";
-import { Stack } from "expo-router";
+import { Stack, useFocusEffect } from "expo-router";
 import { 
   ScrollView, 
   StyleSheet, 
   View, 
   Text, 
   TextInput,
-  Alert
+  Alert,
+  Pressable
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,9 +29,18 @@ export default function SettingsScreen() {
     KV: '0.3',
   });
   
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
+  
   useEffect(() => {
     loadSettings();
   }, []);
+  
+  // Reload settings when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSettings();
+    }, [])
+  );
   
   const loadSettings = async () => {
     try {
@@ -44,6 +54,7 @@ export default function SettingsScreen() {
           Sach: parsed.Sach.toString(),
           KV: parsed.KV.toString(),
         });
+        console.log('Loaded hundredPercentRates:', parsed);
       }
       
       if (savedOverhead) {
@@ -53,7 +64,10 @@ export default function SettingsScreen() {
           Sach: parsed.Sach.toString(),
           KV: parsed.KV.toString(),
         });
+        console.log('Loaded overheadRates:', parsed);
       }
+      
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.log('Error loading settings:', error);
     }
@@ -76,10 +90,27 @@ export default function SettingsScreen() {
       await AsyncStorage.setItem('hundredPercentRates', JSON.stringify(hundredPercentData));
       await AsyncStorage.setItem('overheadRates', JSON.stringify(overheadData));
       
+      console.log('Saved hundredPercentRates:', hundredPercentData);
+      console.log('Saved overheadRates:', overheadData);
+      
+      setHasUnsavedChanges(false);
       Alert.alert('Gespeichert', 'Einstellungen wurden gespeichert.');
     } catch (error) {
       console.log('Error saving settings:', error);
       Alert.alert('Fehler', 'Einstellungen konnten nicht gespeichert werden.');
+    }
+  };
+  
+  const handleInputChange = (
+    type: 'hundredPercent' | 'overhead',
+    division: 'Leben' | 'Sach' | 'KV',
+    value: string
+  ) => {
+    setHasUnsavedChanges(true);
+    if (type === 'hundredPercent') {
+      setHundredPercentRates({ ...hundredPercentRates, [division]: value });
+    } else {
+      setOverheadRates({ ...overheadRates, [division]: value });
     }
   };
   
@@ -88,6 +119,15 @@ export default function SettingsScreen() {
       <Stack.Screen
         options={{
           title: "Einstellungen",
+          headerRight: () => (
+            <Pressable
+              onPress={saveSettings}
+              style={styles.headerButton}
+            >
+              <IconSymbol name="checkmark" color={colors.primary} size={24} />
+              {hasUnsavedChanges && <View style={styles.unsavedIndicator} />}
+            </Pressable>
+          ),
         }}
       />
       <ScrollView 
@@ -112,8 +152,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={hundredPercentRates.Leben}
-                onChangeText={(text) => setHundredPercentRates({ ...hundredPercentRates, Leben: text })}
-                onBlur={saveSettings}
+                onChangeText={(text) => handleInputChange('hundredPercent', 'Leben', text)}
                 keyboardType="numeric"
                 placeholder="44"
                 placeholderTextColor={colors.textLight}
@@ -134,8 +173,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={hundredPercentRates.Sach}
-                onChangeText={(text) => setHundredPercentRates({ ...hundredPercentRates, Sach: text })}
-                onBlur={saveSettings}
+                onChangeText={(text) => handleInputChange('hundredPercent', 'Sach', text)}
                 keyboardType="numeric"
                 placeholder="22.5"
                 placeholderTextColor={colors.textLight}
@@ -156,8 +194,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={hundredPercentRates.KV}
-                onChangeText={(text) => setHundredPercentRates({ ...hundredPercentRates, KV: text })}
-                onBlur={saveSettings}
+                onChangeText={(text) => handleInputChange('hundredPercent', 'KV', text)}
                 keyboardType="numeric"
                 placeholder="8"
                 placeholderTextColor={colors.textLight}
@@ -190,8 +227,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={overheadRates.Leben}
-                onChangeText={(text) => setOverheadRates({ ...overheadRates, Leben: text })}
-                onBlur={saveSettings}
+                onChangeText={(text) => handleInputChange('overhead', 'Leben', text)}
                 keyboardType="numeric"
                 placeholder="0"
                 placeholderTextColor={colors.textLight}
@@ -214,8 +250,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={overheadRates.Sach}
-                onChangeText={(text) => setOverheadRates({ ...overheadRates, Sach: text })}
-                onBlur={saveSettings}
+                onChangeText={(text) => handleInputChange('overhead', 'Sach', text)}
                 keyboardType="numeric"
                 placeholder="0"
                 placeholderTextColor={colors.textLight}
@@ -238,8 +273,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={styles.input}
                 value={overheadRates.KV}
-                onChangeText={(text) => setOverheadRates({ ...overheadRates, KV: text })}
-                onBlur={saveSettings}
+                onChangeText={(text) => handleInputChange('overhead', 'KV', text)}
                 keyboardType="numeric"
                 placeholder="0.3"
                 placeholderTextColor={colors.textLight}
@@ -292,6 +326,17 @@ export default function SettingsScreen() {
             </Text>
           </View>
         </View>
+        
+        {/* Save Button at Bottom */}
+        <Pressable 
+          style={[styles.saveButton, hasUnsavedChanges && styles.saveButtonActive]}
+          onPress={saveSettings}
+        >
+          <IconSymbol name="checkmark.circle.fill" color="#FFFFFF" size={24} />
+          <Text style={styles.saveButtonText}>
+            {hasUnsavedChanges ? 'Änderungen speichern' : 'Gespeichert'}
+          </Text>
+        </Pressable>
         
         {/* Bottom spacing for tab bar */}
         <View style={{ height: 100 }} />
@@ -426,6 +471,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: colors.primary,
+    marginBottom: 16,
   },
   exampleTitle: {
     fontSize: 16,
@@ -454,5 +500,37 @@ const styles = StyleSheet.create({
     color: colors.primary,
     lineHeight: 22,
     fontWeight: '600',
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: colors.textLight,
+    boxShadow: `0px 4px 12px ${colors.shadow}`,
+    elevation: 4,
+  },
+  saveButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  saveButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginLeft: 8,
+  },
+  headerButton: {
+    padding: 8,
+    position: 'relative',
+  },
+  unsavedIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF5722',
   },
 });

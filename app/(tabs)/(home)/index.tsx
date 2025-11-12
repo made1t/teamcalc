@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from "react";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { 
   ScrollView, 
   Pressable, 
@@ -61,10 +61,17 @@ export default function HomeScreen() {
   
   const [visibleLevels, setVisibleLevels] = useState<number>(7);
   
-  // Load saved data
+  // Load saved data on mount
   useEffect(() => {
     loadData();
   }, []);
+  
+  // Reload data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadData();
+    }, [])
+  );
   
   const loadData = async () => {
     try {
@@ -74,11 +81,31 @@ export default function HomeScreen() {
       const savedVisibleLevels = await AsyncStorage.getItem('visibleLevels');
       const savedRevenueLevel = await AsyncStorage.getItem('revenueLevel');
       
-      if (savedHundredPercent) setHundredPercentRates(JSON.parse(savedHundredPercent));
-      if (savedOverheadRates) setOverheadRates(JSON.parse(savedOverheadRates));
-      if (savedLevelRates) setLevelRates(JSON.parse(savedLevelRates));
-      if (savedVisibleLevels) setVisibleLevels(JSON.parse(savedVisibleLevels));
-      if (savedRevenueLevel) setRevenueLevel(JSON.parse(savedRevenueLevel));
+      if (savedHundredPercent) {
+        const parsed = JSON.parse(savedHundredPercent);
+        setHundredPercentRates(parsed);
+        console.log('Loaded hundredPercentRates:', parsed);
+      }
+      if (savedOverheadRates) {
+        const parsed = JSON.parse(savedOverheadRates);
+        setOverheadRates(parsed);
+        console.log('Loaded overheadRates:', parsed);
+      }
+      if (savedLevelRates) {
+        const parsed = JSON.parse(savedLevelRates);
+        setLevelRates(parsed);
+        console.log('Loaded levelRates:', parsed);
+      }
+      if (savedVisibleLevels) {
+        const parsed = JSON.parse(savedVisibleLevels);
+        setVisibleLevels(parsed);
+        console.log('Loaded visibleLevels:', parsed);
+      }
+      if (savedRevenueLevel) {
+        const parsed = JSON.parse(savedRevenueLevel);
+        setRevenueLevel(parsed);
+        console.log('Loaded revenueLevel:', parsed);
+      }
     } catch (error) {
       console.log('Error loading data:', error);
     }

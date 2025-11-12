@@ -38,6 +38,7 @@ export default function EditLevelsScreen() {
   
   const [visibleLevels, setVisibleLevels] = useState<number>(7);
   const [revenueLevelIndex, setRevenueLevelIndex] = useState<number>(6);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
   
   useEffect(() => {
     loadLevels();
@@ -49,9 +50,21 @@ export default function EditLevelsScreen() {
       const savedVisible = await AsyncStorage.getItem('visibleLevels');
       const savedRevenueLevel = await AsyncStorage.getItem('revenueLevel');
       
-      if (savedLevels) setLevels(JSON.parse(savedLevels));
-      if (savedVisible) setVisibleLevels(JSON.parse(savedVisible));
-      if (savedRevenueLevel) setRevenueLevelIndex(JSON.parse(savedRevenueLevel));
+      if (savedLevels) {
+        const parsed = JSON.parse(savedLevels);
+        setLevels(parsed);
+        console.log('Loaded levels:', parsed);
+      }
+      if (savedVisible) {
+        const parsed = JSON.parse(savedVisible);
+        setVisibleLevels(parsed);
+        console.log('Loaded visibleLevels:', parsed);
+      }
+      if (savedRevenueLevel) {
+        const parsed = JSON.parse(savedRevenueLevel);
+        setRevenueLevelIndex(parsed);
+        console.log('Loaded revenueLevelIndex:', parsed);
+      }
     } catch (error) {
       console.log('Error loading levels:', error);
     }
@@ -73,7 +86,7 @@ export default function EditLevelsScreen() {
       
       if (!isValid) {
         Alert.alert('Ungültige Prozentsätze', errorMessage);
-        return;
+        return false;
       }
       
       // Calculate total percentage
@@ -88,29 +101,55 @@ export default function EditLevelsScreen() {
       }
       
       if (Math.abs(totalPercentage - 100) > 0.1) {
-        Alert.alert(
-          'Warnung',
-          `Die Gesamtprozentsätze ergeben ${totalPercentage.toFixed(1)}% statt 100%. Bitte passen Sie die Werte an.`,
-          [
-            { text: 'Trotzdem speichern', onPress: async () => {
-              await AsyncStorage.setItem('levelRates', JSON.stringify(levels));
-              await AsyncStorage.setItem('visibleLevels', JSON.stringify(visibleLevels));
-              await AsyncStorage.setItem('revenueLevel', JSON.stringify(revenueLevelIndex));
-              Alert.alert('Gespeichert', 'Ebenen wurden gespeichert.');
-            }},
-            { text: 'Abbrechen', style: 'cancel' }
-          ]
-        );
-        return;
+        return new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Warnung',
+            `Die Gesamtprozentsätze ergeben ${totalPercentage.toFixed(1)}% statt 100%. Bitte passen Sie die Werte an.`,
+            [
+              { 
+                text: 'Trotzdem speichern', 
+                onPress: async () => {
+                  await AsyncStorage.setItem('levelRates', JSON.stringify(levels));
+                  await AsyncStorage.setItem('visibleLevels', JSON.stringify(visibleLevels));
+                  await AsyncStorage.setItem('revenueLevel', JSON.stringify(revenueLevelIndex));
+                  console.log('Saved levels:', levels);
+                  console.log('Saved visibleLevels:', visibleLevels);
+                  console.log('Saved revenueLevelIndex:', revenueLevelIndex);
+                  setHasUnsavedChanges(false);
+                  Alert.alert('Gespeichert', 'Ebenen wurden gespeichert.');
+                  resolve(true);
+                }
+              },
+              { 
+                text: 'Abbrechen', 
+                style: 'cancel',
+                onPress: () => resolve(false)
+              }
+            ]
+          );
+        });
       }
       
       await AsyncStorage.setItem('levelRates', JSON.stringify(levels));
       await AsyncStorage.setItem('visibleLevels', JSON.stringify(visibleLevels));
       await AsyncStorage.setItem('revenueLevel', JSON.stringify(revenueLevelIndex));
+      console.log('Saved levels:', levels);
+      console.log('Saved visibleLevels:', visibleLevels);
+      console.log('Saved revenueLevelIndex:', revenueLevelIndex);
+      setHasUnsavedChanges(false);
       Alert.alert('Gespeichert', 'Ebenen wurden gespeichert.');
+      return true;
     } catch (error) {
       console.log('Error saving levels:', error);
       Alert.alert('Fehler', 'Ebenen konnten nicht gespeichert werden.');
+      return false;
+    }
+  };
+  
+  const handleSaveAndGoBack = async () => {
+    const saved = await saveLevels();
+    if (saved !== false) {
+      router.back();
     }
   };
   
@@ -134,18 +173,26 @@ export default function EditLevelsScreen() {
     }
     
     setLevels(newLevels);
+    setHasUnsavedChanges(true);
   };
   
   const expandLevels = () => {
     if (visibleLevels < 10) {
       setVisibleLevels(10);
+      setHasUnsavedChanges(true);
     }
   };
   
   const collapseLevels = () => {
     if (visibleLevels > 7) {
       setVisibleLevels(7);
+      setHasUnsavedChanges(true);
     }
+  };
+  
+  const handleRevenueLevelChange = (index: number) => {
+    setRevenueLevelIndex(index);
+    setHasUnsavedChanges(true);
   };
   
   // Calculate the difference for each level
@@ -180,8 +227,19 @@ export default function EditLevelsScreen() {
           headerLeft: () => (
             <Pressable
               onPress={() => {
-                saveLevels();
-                router.back();
+                if (hasUnsavedChanges) {
+                  Alert.alert(
+                    'Ungespeicherte Änderungen',
+                    'Möchten Sie die Änderungen speichern?',
+                    [
+                      { text: 'Verwerfen', style: 'destructive', onPress: () => router.back() },
+                      { text: 'Speichern', onPress: handleSaveAndGoBack },
+                      { text: 'Abbrechen', style: 'cancel' }
+                    ]
+                  );
+                } else {
+                  router.back();
+                }
               }}
               style={styles.headerButton}
             >
@@ -194,6 +252,7 @@ export default function EditLevelsScreen() {
               style={styles.headerButton}
             >
               <IconSymbol name="checkmark" color={colors.primary} size={24} />
+              {hasUnsavedChanges && <View style={styles.unsavedIndicator} />}
             </Pressable>
           ),
         }}
@@ -263,9 +322,7 @@ export default function EditLevelsScreen() {
                       styles.revenueLevelButton,
                       isRevenueLevel && styles.revenueLevelButtonActive
                     ]}
-                    onPress={() => {
-                      setRevenueLevelIndex(index);
-                    }}
+                    onPress={() => handleRevenueLevelChange(index)}
                   >
                     <Text style={[
                       styles.revenueLevelButtonText,
@@ -286,7 +343,6 @@ export default function EditLevelsScreen() {
                           const value = parseFloat(text) || 0;
                           updateLevelRate(index, value);
                         }}
-                        onBlur={saveLevels}
                         keyboardType="numeric"
                       />
                       <Text style={styles.rateInputSuffix}>%</Text>
@@ -307,7 +363,6 @@ export default function EditLevelsScreen() {
                     step={0.5}
                     value={level.rate}
                     onValueChange={(value) => updateLevelRate(index, value)}
-                    onSlidingComplete={saveLevels}
                     minimumTrackTintColor={colors.primary}
                     maximumTrackTintColor={colors.border}
                     thumbTintColor={colors.primary}
@@ -371,6 +426,17 @@ export default function EditLevelsScreen() {
             Gesamt: 85% + 10% + 5% + 0% = 100%
           </Text>
         </View>
+        
+        {/* Save Button at Bottom */}
+        <Pressable 
+          style={[styles.saveButton, hasUnsavedChanges && styles.saveButtonActive]}
+          onPress={handleSaveAndGoBack}
+        >
+          <IconSymbol name="checkmark.circle.fill" color="#FFFFFF" size={24} />
+          <Text style={styles.saveButtonText}>
+            {hasUnsavedChanges ? 'Änderungen speichern' : 'Gespeichert'}
+          </Text>
+        </Pressable>
         
         {/* Bottom spacing */}
         <View style={{ height: 40 }} />
@@ -631,6 +697,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#FFB74D',
+    marginBottom: 16,
   },
   exampleTitle: {
     fontSize: 16,
@@ -644,7 +711,36 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'monospace',
   },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: colors.textLight,
+    boxShadow: `0px 4px 12px ${colors.shadow}`,
+    elevation: 4,
+  },
+  saveButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  saveButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginLeft: 8,
+  },
   headerButton: {
     padding: 8,
+    position: 'relative',
+  },
+  unsavedIndicator: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF5722',
   },
 });
